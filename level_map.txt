@@ -1,0 +1,55 @@
+# Sky Defender - Level Map
+# G=Grass  D=Dirt  S=Stone  .=Empty
+# Edit with level_editor.py or by hand
+#
+# ===== MAP DATA =====
+.........................
+.........................
+.........................
+.........................
+.........................
+.........................
+.........................
+.........................
+........S.......DDDDD....
+......DDDG...............
+.............S.......S...
+....S......GGGG.....DDDD.
+..GDDD...................
+.................DDDD....
+.......DDDD..............
+..S..S...................
+SDDDDD......S.S....DDDDS.
+DDDDDDDDDDDDDDDDDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDDD
+
+# ===== DECORATIONS =====
+DECO 3 12 tree
+DECO 23 11 tree
+DECO 18 17 grass
+DECO 24 17 grass
+DECO 21 16 grass
+DECO 20 16 grass
+DECO 22 16 grass
+DECO 19 16 grass
+DECO 4 16 grass
+DECO 3 16 grass
+DECO 7 14 grass
+DECO 8 14 grass
+DECO 9 14 grass
+DECO 10 14 grass
+DECO 17 13 grass
+DECO 18 13 grass
+DECO 19 13 rock
+DECO 20 13 rock
+DECO 22 11 rock
+DECO 20 11 rock
+DECO 20 8 tree
+DECO 16 8 grass
+DECO 18 8 grass
+DECO 11 11 grass
+DECO 7 17 grass
+DECO 8 17 grass
+DECO 9 17 grass
+DECO 16 17 grass
+DECO 13 17 grass
