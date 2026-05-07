@@ -62,7 +62,14 @@ SHIELD_HITS = 1
 # Chế độ
 MODE_TIME_ATTACK = "time_attack"
 MODE_CAMPAIGN = "campaign"
+MODE_HARDCORE = "hardcore"
 TIME_OPTIONS = [5 * 60, 10 * 60]
+
+# Hardcore difficulty (áp vào enemy bullet speed & spawn rate)
+HARDCORE_BULLET_MULT = 1.6      # đạn địch / boss nhanh hơn 60%
+HARDCORE_SPAWN_MULT = 0.55      # cooldown spawn ngắn lại → quái dày hơn
+HARDCORE_FORMATION_MULT = 0.6   # formation ra dày hơn
+HARDCORE_FORMATION_BONUS = 1    # +1 quái mỗi formation
 
 # High Score
 HIGHSCORE_FILE = os.path.join(BASE_DIR, "highscore.json")
