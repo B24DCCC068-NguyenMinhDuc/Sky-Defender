@@ -1,8 +1,36 @@
 """Hằng số và cấu hình Sky Defender (Top-down Shooter)."""
 import os
+import sys
 
-# Đường dẫn
-BASE_DIR = os.path.dirname(__file__)
+
+def _is_frozen():
+    return getattr(sys, "frozen", False)
+
+
+def _resource_root():
+    """Thư mục chứa assets read-only.
+
+    - Khi chạy từ source: cạnh file settings.py.
+    - Khi đóng gói PyInstaller --onefile: thư mục tạm sys._MEIPASS.
+    """
+    if _is_frozen():
+        return getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _user_data_root():
+    """Thư mục cho file ghi (highscore.json).
+
+    - Khi đóng gói: cạnh file .exe (portable).
+    - Khi chạy source: cạnh settings.py.
+    """
+    if _is_frozen():
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+# Đường dẫn (read-only)
+BASE_DIR = _resource_root()
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 IMG_DIR = os.path.join(ASSETS_DIR, "images")
 SND_DIR = os.path.join(ASSETS_DIR, "sounds")
@@ -71,5 +99,5 @@ HARDCORE_SPAWN_MULT = 0.55      # cooldown spawn ngắn lại → quái dày hơ
 HARDCORE_FORMATION_MULT = 0.6   # formation ra dày hơn
 HARDCORE_FORMATION_BONUS = 1    # +1 quái mỗi formation
 
-# High Score
-HIGHSCORE_FILE = os.path.join(BASE_DIR, "highscore.json")
+# High Score (file ghi - để cạnh exe khi đóng gói)
+HIGHSCORE_FILE = os.path.join(_user_data_root(), "highscore.json")
