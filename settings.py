@@ -1,8 +1,36 @@
 """Hằng số và cấu hình Sky Defender (Top-down Shooter)."""
 import os
+import sys
 
-# Đường dẫn
-BASE_DIR = os.path.dirname(__file__)
+
+def _is_frozen():
+    return getattr(sys, "frozen", False)
+
+
+def _resource_root():
+    """Thư mục chứa assets read-only.
+
+    - Khi chạy từ source: cạnh file settings.py.
+    - Khi đóng gói PyInstaller --onefile: thư mục tạm sys._MEIPASS.
+    """
+    if _is_frozen():
+        return getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _user_data_root():
+    """Thư mục cho file ghi (highscore.json).
+
+    - Khi đóng gói: cạnh file .exe (portable).
+    - Khi chạy source: cạnh settings.py.
+    """
+    if _is_frozen():
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+# Đường dẫn (read-only)
+BASE_DIR = _resource_root()
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 IMG_DIR = os.path.join(ASSETS_DIR, "images")
 SND_DIR = os.path.join(ASSETS_DIR, "sounds")
@@ -30,8 +58,8 @@ GRAY = (150, 150, 150)
 DARK_GRAY = (60, 60, 60)
 
 # Player
-PLAYER_SPEED = 9
-PLAYER_MAX_HP = 8              # 25% heal = 2 HP
+PLAYER_SPEED = 7
+PLAYER_MAX_HP = 6              # 25% heal = 2 HP
 PLAYER_SHOOT_COOLDOWN = 200    # ms (auto-fire)
 PLAYER_HURT_FLASH_MS = 400
 PLAYER_INVULN_MS = 900
@@ -78,3 +106,18 @@ DASH_TRAIL_LEN  = 5      # number of ghost frames drawn behind the ship
 COMBO_WINDOW    = 1800   # ms — kills within this window chain the combo
 COMBO_MAX_MULT  = 5      # combo caps at ×5
 COMBO_POPUP_TTL = 900    # ms a floating score popup stays visible
+MODE_HARDCORE = "hardcore"
+TIME_OPTIONS = [5 * 60, 10 * 60]
+
+# Hardcore difficulty (áp vào enemy bullet speed & spawn rate)
+HARDCORE_BULLET_MULT = 1.6      # đạn địch / boss nhanh hơn 60%
+HARDCORE_SPAWN_MULT = 0.55      # cooldown spawn ngắn lại → quái dày hơn
+HARDCORE_FORMATION_MULT = 0.6   # formation ra dày hơn
+HARDCORE_FORMATION_BONUS = 1    # +1 quái mỗi formation
+
+# --- Chỉnh setting của player ---
+HARDCORE_DROP_CHANCE = 0.08
+HARDCORE_MAX_HP = 3
+
+# High Score (file ghi - để cạnh exe khi đóng gói)
+HIGHSCORE_FILE = os.path.join(_user_data_root(), "highscore.json")

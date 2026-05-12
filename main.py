@@ -94,9 +94,10 @@ def load_highscores():
                 "time_5": int(data.get("time_5", 0)),
                 "time_10": int(data.get("time_10", 0)),
                 "campaign": int(data.get("campaign", 0)),
+                "hardcore": int(data.get("hardcore", 0)),
             }
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return {"time_5": 0, "time_10": 0, "campaign": 0}
+        return {"time_5": 0, "time_10": 0, "campaign": 0, "hardcore": 0}
 
 
 def save_highscore(mode, score):
@@ -167,6 +168,30 @@ shake = ScreenShake()
 
 
 # ============================================================
+# DIFFICULTY (module-level state, set khi vào game_loop)
+# ============================================================
+class Difficulty:
+    bullet_mult = 1.0
+    spawn_mult = 1.0
+    formation_mult = 1.0
+    formation_bonus = 0
+
+    @classmethod
+    def normal(cls):
+        cls.bullet_mult = 1.0
+        cls.spawn_mult = 1.0
+        cls.formation_mult = 1.0
+        cls.formation_bonus = 0
+
+    @classmethod
+    def hardcore(cls):
+        cls.bullet_mult = HARDCORE_BULLET_MULT
+        cls.spawn_mult = HARDCORE_SPAWN_MULT
+        cls.formation_mult = HARDCORE_FORMATION_MULT
+        cls.formation_bonus = HARDCORE_FORMATION_BONUS
+
+
+# ============================================================
 # PLAYER
 # ============================================================
 class Player(pygame.sprite.Sprite):
@@ -177,7 +202,8 @@ class Player(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(midbottom=(WIDTH // 2, HEIGHT - 40))
 
         # --- Existing stats ---
-        self.hp = PLAYER_MAX_HP
+        self.max_hp = PLAYER_MAX_HP
+        self.hp = self.max_hp
         self.last_shot = 0
         self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN
         self.damage = 1
@@ -279,7 +305,6 @@ class Player(pygame.sprite.Sprite):
         self.rect.top    = max(0,     self.rect.top)
         self.rect.bottom = min(HEIGHT, self.rect.bottom)
 
-    # Không thay đổi từ đây đến cmt sau
     def shoot(self):
         now = pygame.time.get_ticks()
         if now - self.last_shot < self.shoot_cooldown:
@@ -320,8 +345,8 @@ class Player(pygame.sprite.Sprite):
     def apply_powerup(self, ptype):
         now = pygame.time.get_ticks()
         if ptype == "heal":
-            heal = max(1, PLAYER_MAX_HP // 4)
-            self.hp = min(self.hp + heal, PLAYER_MAX_HP)
+            heal = max(1, self.max_hp // 4)
+            self.hp = min(self.hp + heal, self.max_hp)
         elif ptype == "triple":
             self.triple_shot_until = now + TRIPLE_SHOT_DURATION
         elif ptype == "shield":
@@ -345,22 +370,22 @@ class Player(pygame.sprite.Sprite):
         img = self.base_image
 
         # Red tint when hurt
+    def draw(self, surface, ox, oy):
+        now = pygame.time.get_ticks()
+        if self.invulnerable and not self.hurt and (now // 90) % 2 == 0:
+            return
+        img = self.base_image
         if self.hurt and (now // 60) % 2 == 0:
             img = self.base_image.copy()
             tint = pygame.Surface(img.get_size(), pygame.SRCALPHA)
             tint.fill((255, 70, 70, 200))
             img.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-
-        # Cyan tint when dash
-        if self.dashing:
-            img = self.base_image.copy()
+        elif self.dashing:
+            img  = self.base_image.copy()
             tint = pygame.Surface(img.get_size(), pygame.SRCALPHA)
             tint.fill((100, 220, 255, 160))
             img.blit(tint, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-
         surface.blit(img, (self.rect.x + ox, self.rect.y + oy))
-
-        # Shield aura (remained)
         if self.shielded:
             cx = self.rect.centerx + ox
             cy = self.rect.centery + oy
@@ -495,7 +520,8 @@ class Scout(pygame.sprite.Sprite):
         if now >= self.next_shot and random.random() < 0.02:
             self.next_shot = now + random.randint(2200, 4500)
             return Bullet(self.rect.centerx, self.rect.bottom,
-                          0, ENEMY_BULLET_SPEED, bullet_enemy_img)
+                          0, ENEMY_BULLET_SPEED * Difficulty.bullet_mult,
+                          bullet_enemy_img)
         return None
 
     def take_hit(self, dmg):
@@ -536,7 +562,8 @@ class Interceptor(pygame.sprite.Sprite):
         if now >= self.next_shot and random.random() < 0.03:
             self.next_shot = now + random.randint(1300, 2800)
             return Bullet(self.rect.centerx, self.rect.bottom,
-                          0, ENEMY_BULLET_SPEED + 1, bullet_enemy_img)
+                          0, (ENEMY_BULLET_SPEED + 1) * Difficulty.bullet_mult,
+                          bullet_enemy_img)
         return None
 
     def take_hit(self, dmg):
@@ -598,6 +625,7 @@ class Boss(pygame.sprite.Sprite):
         now = pygame.time.get_ticks()
         bullets = []
         minions = []
+        bspeed = BOSS_BULLET_SPEED * Difficulty.bullet_mult
         shoot_cd = {1: 950, 2: 750, 3: 620}[self.phase]
         if now - self.last_shot >= shoot_cd:
             self.last_shot = now
@@ -608,6 +636,8 @@ class Boss(pygame.sprite.Sprite):
                 d = max(1, math.hypot(dx, dy))
                 vx = dx / d * BOSS_BULLET_SPEED
                 vy = dy / d * BOSS_BULLET_SPEED
+                vx = dx / d * bspeed
+                vy = dy / d * bspeed
                 bullets.append(Bullet(cx, cy, vx, vy, bullet_boss_img, 1,
                                       rotate_to_dir=True))
             elif self.phase == 2:
@@ -615,6 +645,8 @@ class Boss(pygame.sprite.Sprite):
                     a = math.radians(ang)
                     vx = math.sin(a) * BOSS_BULLET_SPEED
                     vy = math.cos(a) * BOSS_BULLET_SPEED
+                    vx = math.sin(a) * bspeed
+                    vy = math.cos(a) * bspeed
                     bullets.append(Bullet(cx, cy, vx, vy, bullet_boss_img, 1,
                                           rotate_to_dir=True))
             else:
@@ -622,6 +654,8 @@ class Boss(pygame.sprite.Sprite):
                     a = math.radians(ang)
                     vx = math.sin(a) * BOSS_BULLET_SPEED
                     vy = math.cos(a) * BOSS_BULLET_SPEED
+                    vx = math.sin(a) * bspeed
+                    vy = math.cos(a) * bspeed
                     bullets.append(Bullet(cx, cy, vx, vy, bullet_boss_img, 1,
                                           rotate_to_dir=True))
         if self.phase == 3 and now - self.last_summon >= 3500:
@@ -637,7 +671,7 @@ class Boss(pygame.sprite.Sprite):
         self.hp -= dmg
         return self.hp <= 0
 
-    def dhp_bar(self, surface, ox=0, oy=0):
+    def draw_hp_bar(self, surface, ox=0, oy=0):
         bw, bh = 240, 12
         x = WIDTH // 2 - bw // 2 + ox
         y = 44 + oy
@@ -708,9 +742,94 @@ def dhud(surface, player, score, high_score, combo,
              time_left=None, level=None, boss_count=None):
     """Mở rộng HUD: tim, điểm, thời gian/bàn, trạng thái sức mạnh, thanh hồi dash và hệ số nhân combo"""
 
+
+# ============================================================
+# PAUSE BUTTON (nút tam giác trên HUD) + PAUSE MENU
+# ============================================================
+PAUSE_BTN_RECT = pygame.Rect(WIDTH - 48, 56, 36, 36)
+
+
+def draw_pause_button(surface, hover):
+    rect = PAUSE_BTN_RECT
+    bg_col = (90, 90, 130) if hover else (40, 40, 60)
+    border = YELLOW if hover else WHITE
+    pygame.draw.rect(surface, bg_col, rect, border_radius=6)
+    pygame.draw.rect(surface, border, rect, 2, border_radius=6)
+    pad = 9
+    pts = [
+        (rect.left + pad, rect.top + pad),
+        (rect.right - pad + 1, rect.centery),
+        (rect.left + pad, rect.bottom - pad),
+    ]
+    pygame.draw.polygon(surface, border, pts)
+
+
+def pause_menu():
+    """Hiển thị pause menu trên trạng thái hiện tại của màn hình.
+    Trả về 'resume' / 'menu' / 'quit'."""
+    bg = screen.copy()
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 180))
+
+    resume_rect = pygame.Rect(0, 0, 280, 64)
+    resume_rect.center = (WIDTH // 2, HEIGHT // 2 - 20)
+    exit_rect = pygame.Rect(0, 0, 280, 64)
+    exit_rect.center = (WIDTH // 2, HEIGHT // 2 + 70)
+
+    while True:
+        clock.tick(FPS)
+        mouse_clicked = False
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_ESCAPE, pygame.K_p):
+                    return "resume"
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_clicked = True
+
+        screen.blit(bg, (0, 0))
+        screen.blit(overlay, (0, 0))
+
+        title = font48.render("PAUSED", True, WHITE)
+        screen.blit(title,
+                    (WIDTH // 2 - title.get_width() // 2, HEIGHT // 2 - 160))
+
+        mouse = pygame.mouse.get_pos()
+        for rect, label in ((resume_rect, "RESUME"),
+                            (exit_rect, "MAIN MENU")):
+            hover = rect.collidepoint(mouse)
+            bg_col = (90, 90, 130) if hover else (60, 60, 90)
+            border = YELLOW if hover else WHITE
+            pygame.draw.rect(screen, bg_col, rect, border_radius=10)
+            pygame.draw.rect(screen, border, rect, 3, border_radius=10)
+            txt = font26.render(label, True, WHITE)
+            screen.blit(txt, (rect.centerx - txt.get_width() // 2,
+                              rect.centery - txt.get_height() // 2))
+
+        ctrls = font16.render(
+            "ESC tiep tuc  |  Click chuot de chon",
+            True, (200, 200, 200))
+        screen.blit(ctrls,
+                    (WIDTH // 2 - ctrls.get_width() // 2, HEIGHT - 40))
+
+        if mouse_clicked:
+            if resume_rect.collidepoint(mouse):
+                return "resume"
+            if exit_rect.collidepoint(mouse):
+                return "menu"
+
+        pygame.display.flip()
+
+
+# ============================================================
+# HUD
+# ============================================================
+def draw_hud(surface, player, score, high_score, combo,
+             time_left=None, level=None, boss_count=None):
     # Hearts
     pygame.draw.rect(surface, (30, 30, 30),
-                     (8, 8, PLAYER_MAX_HP * 22 + 10, 26), border_radius=4)
+                     (8, 8, player.max_hp * 22 + 10, 26), border_radius=4)
     for i in range(player.hp):
         surface.blit(heart_img, (12 + i * 22, 11))
 
@@ -733,6 +852,7 @@ def dhud(surface, player, score, high_score, combo,
         surface.blit(l, (WIDTH // 2 - l.get_width() // 2, 12))
 
     # Power-up indicators (dưới góc trái)
+    # Power-up indicators (dưới)
     now = pygame.time.get_ticks()
     ind_y = HEIGHT - 26
     if player.triple_shot:
@@ -845,9 +965,22 @@ def pause_menu(frozen_surface):
 # ============================================================
 # GAME LOOP (dùng chung cho Time Attack và Campaign)
 # ============================================================
-def game_loop(mode_key, time_limit=None):
-    """mode_key: 'time_5' | 'time_10' | 'campaign'. Returns (result, score)."""
+def game_loop(mode_key, time_limit=None, hardcore=False):
+    """mode_key: 'time_5' | 'time_10' | 'campaign' | 'hardcore'.
+    Returns (result, score)."""
+    if hardcore:
+        Difficulty.hardcore()
+    else:
+        Difficulty.normal()
+
     player = Player()
+    # Apply hardcore player settings
+    if hardcore:
+        player.max_hp = HARDCORE_MAX_HP
+        player.hp = HARDCORE_MAX_HP
+    
+    # Store the drop chance for this mode
+    drop_chance = HARDCORE_DROP_CHANCE if hardcore else POWERUP_DROP_CHANCE
     starfield = StarField()
     player_bullets = pygame.sprite.Group()
     enemy_bullets = pygame.sprite.Group()
@@ -881,11 +1014,41 @@ def game_loop(mode_key, time_limit=None):
             saved = True
         return result, score
 
+    def trigger_pause():
+        """Mở pause menu, sau đó dịch tất cả timestamp lên để skip thời gian
+        đã pause (tránh spawn dồn dập / cooldown trượt khi resume)."""
+        nonlocal start_time, last_spawn, last_formation, last_boss_died_ms
+        pause_start = pygame.time.get_ticks()
+        result = pause_menu()
+        if result != "resume":
+            return result
+        dur = pygame.time.get_ticks() - pause_start
+        start_time += dur
+        last_spawn += dur
+        last_formation += dur
+        if last_boss_died_ms is not None:
+            last_boss_died_ms += dur
+        player.last_shot += dur
+        if player.hurt_until > 0:
+            player.hurt_until += dur
+        if player.invuln_until > 0:
+            player.invuln_until += dur
+        if player.triple_shot_until > 0:
+            player.triple_shot_until += dur
+        for e in enemies:
+            if hasattr(e, "next_shot"):
+                e.next_shot += dur
+        if boss:
+            boss.last_shot += dur
+            boss.last_summon += dur
+        return "resume"
+
     while True:
         clock.tick(FPS)
         now = pygame.time.get_ticks()
         elapsed = (now - start_time) / 1000.0
         mouse_clicked = False
+        wants_pause = False
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -907,6 +1070,26 @@ def game_loop(mode_key, time_limit=None):
                         return finish("restart")
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_clicked = True
+                if event.key == pygame.K_ESCAPE:
+                    if game_over or game_won:
+                        return finish("menu")
+                    wants_pause = True
+                if (game_over or game_won) and event.key == pygame.K_RETURN:
+                    return finish("restart")
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_clicked = True
+                if (not game_over and not game_won
+                        and PAUSE_BTN_RECT.collidepoint(event.pos)):
+                    wants_pause = True
+
+        if wants_pause:
+            r = trigger_pause()
+            if r == "menu":
+                return finish("menu")
+            if r == "quit":
+                return finish("quit")
+            # 'resume' → tiếp tục vòng lặp với timestamps đã shift
+            continue
 
         starfield.update()
 
@@ -940,6 +1123,7 @@ def game_loop(mode_key, time_limit=None):
 
             # --- Spawn enemy thường ---
             spawn_cd = max(450, int(ENEMY_SPAWN_INTERVAL - elapsed * 4))
+            spawn_cd = max(250, int(spawn_cd * Difficulty.spawn_mult))
             if boss is not None:
                 spawn_cd = max(spawn_cd, 1600)
             if now - last_spawn >= spawn_cd:
@@ -956,6 +1140,12 @@ def game_loop(mode_key, time_limit=None):
             if now - last_formation >= form_cd:
                 last_formation = now
                 count = random.randint(FORMATION_MIN, FORMATION_MAX)
+            form_cd = int(form_cd * Difficulty.formation_mult)
+            if now - last_formation >= form_cd:
+                last_formation = now
+                count = random.randint(
+                    FORMATION_MIN + Difficulty.formation_bonus,
+                    FORMATION_MAX + Difficulty.formation_bonus)
                 spacing = WIDTH // (count + 1)
                 speed_mult = 1.0 + elapsed / 260 + (level - 1) * 0.12
                 shared_speed = random.uniform(
@@ -995,6 +1185,7 @@ def game_loop(mode_key, time_limit=None):
                     b.kill()
                     if dead:
                         score += combo.register_kill(boss.points, boss.rect.centerx, boss.rect.centery)
+                        score += boss.points
                         explosions.add(Explosion(boss.rect.center, scale=2.0))
                         shake.shake(22, 1)
                         last_boss_died_ms = now
@@ -1009,15 +1200,16 @@ def game_loop(mode_key, time_limit=None):
                             level += 1
                             boss_count = 0
                             last_boss_died_ms = now
-                            player.hp = min(player.hp + 2, PLAYER_MAX_HP)
+                            player.hp = min(player.hp + 2, player.max_hp)
                     continue
                 killed = False
                 for e in list(enemies):
                     if b.rect.colliderect(e.rect):
                         if e.take_hit(b.damage):
                             score += combo.register_kill(e.POINTS, e.rect.centerx, e.rect.centery)
+                            score += e.POINTS
                             explosions.add(Explosion(e.rect.center))
-                            if random.random() < POWERUP_DROP_CHANCE:
+                            if random.random() < drop_chance:
                                 pt = random.choice(
                                     ["triple", "heal", "shield"])
                                 powerups.add(PowerUp(
@@ -1096,11 +1288,24 @@ def game_loop(mode_key, time_limit=None):
 
         # HUD
         if is_campaign:
-            dhud(screen, player, score, hi, combo,
+            draw_hud(screen, player, score, hi, combo,
                      level=level, boss_count=boss_count)
+        elif hardcore:
+            draw_hud(screen, player, score, hi, combo, time_left=elapsed)
+            tag = font18.render("HARDCORE", True, RED)
+            screen.blit(tag, (WIDTH // 2 - tag.get_width() // 2, 38))
         else:
             rem = max(0, time_limit - elapsed) if time_limit else None
-            dhud(screen, player, score, hi, combo, time_left=rem)
+            draw_hud(screen, player, score, hi, combo, time_left=rem)
+
+        # Draw boss HP bar if boss exists
+        if boss and not boss.entering:
+            boss.draw_hp_bar(screen, ox, oy)
+
+        # Pause button (chỉ khi đang chơi)
+        if not game_over and not game_won:
+            mouse_pos = pygame.mouse.get_pos()
+            draw_pause_button(screen, PAUSE_BTN_RECT.collidepoint(mouse_pos))
 
         # Boss approaching warning (campaign)
         if is_campaign and boss is None and boss_count < BOSSES_PER_LEVEL:
@@ -1158,16 +1363,18 @@ def mode_select_menu():
         ("TIME ATTACK  -  5 MIN", "time_5"),
         ("TIME ATTACK  - 10 MIN", "time_10"),
         ("CAMPAIGN  -  3 BOSS / LEVEL", "campaign"),
+        ("HARDCORE  -  ENDLESS", "hardcore"),
         ("BACK", "back"),
     ]
     descs = {
         "time_5": "Sống sót 5 phút. Boss xuất hiện mỗi 90s.",
         "time_10": "Sống sót 10 phút. Boss mạnh dần.",
         "campaign": "3 boss mỗi màn. Hạ boss thứ 3 để qua màn.",
+        "hardcore": "Endless. Đạn nhanh hơn, quái dày hơn - khó nhất!",
         "back": "",
     }
     sel = 0
-    option_rects = [pygame.Rect(WIDTH // 2 - 220, 180 + i * 70, 440, 44)
+    option_rects = [pygame.Rect(WIDTH // 2 - 220, 130 + i * 96, 440, 60)
                     for i in range(len(options))]
     hs = load_highscores()
 
@@ -1200,7 +1407,6 @@ def mode_select_menu():
 
         mouse = pygame.mouse.get_pos()
         for i, (label, key) in enumerate(options):
-            y = 180 + i * 70
             rect = option_rects[i]
             if rect.collidepoint(mouse):
                 sel = i
@@ -1211,11 +1417,14 @@ def mode_select_menu():
                 pygame.draw.rect(screen, YELLOW, rect, 2, border_radius=6)
                 if descs[key]:
                     d = font16.render(descs[key], True, (200, 200, 200))
-                    screen.blit(d, (WIDTH // 2 - d.get_width() // 2, y + 30))
+                    screen.blit(d, (WIDTH // 2 - d.get_width() // 2,
+                                    rect.y + 36))
                 if key in hs:
-                    hst = font16.render(f"High Score: {hs[key]}", True, YELLOW)
-                    screen.blit(hst, (WIDTH // 2 - hst.get_width() // 2, y + 48))
-            screen.blit(txt, (tx, y))
+                    hst = font16.render(
+                        f"High Score: {hs[key]}", True, YELLOW)
+                    screen.blit(hst, (WIDTH // 2 - hst.get_width() // 2,
+                                      rect.bottom + 6))
+            screen.blit(txt, (tx, rect.y + 6))
             if mouse_clicked and rect.collidepoint(mouse):
                 return key
 
@@ -1294,6 +1503,8 @@ def main():
                 result, _ = game_loop("time_5", 5 * 60)
             elif mode == "time_10":
                 result, _ = game_loop("time_10", 10 * 60)
+            elif mode == "hardcore":
+                result, _ = game_loop("hardcore", hardcore=True)
             else:
                 result, _ = game_loop("campaign")
             if result == "restart":
