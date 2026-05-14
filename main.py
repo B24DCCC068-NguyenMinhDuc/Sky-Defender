@@ -7,6 +7,8 @@ import json
 import pygame
 from settings import *
 
+AUDIO_DIR = os.path.join(BASE_DIR, "shooter_assets", "audio")
+
 pygame.init()
 pygame.display.set_caption(TITLE)
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -982,6 +984,9 @@ def game_loop(mode_key, time_limit=None, hardcore=False):
     # Store the drop chance for this mode
     drop_chance = HARDCORE_DROP_CHANCE if hardcore else POWERUP_DROP_CHANCE
     starfield = StarField()
+    pygame.mixer.music.load(os.path.join(AUDIO_DIR, 'music2.mp3'))
+    pygame.mixer.music.play(-1)
+    music_playing = True
     player_bullets = pygame.sprite.Group()
     enemy_bullets = pygame.sprite.Group()
     enemies = pygame.sprite.Group()
@@ -1012,16 +1017,20 @@ def game_loop(mode_key, time_limit=None, hardcore=False):
         if not saved:
             save_highscore(mode_key, score)
             saved = True
+        pygame.mixer.music.stop()
         return result, score
 
     def trigger_pause():
         """Mở pause menu, sau đó dịch tất cả timestamp lên để skip thời gian
         đã pause (tránh spawn dồn dập / cooldown trượt khi resume)."""
         nonlocal start_time, last_spawn, last_formation, last_boss_died_ms
+        pygame.mixer.music.pause()
         pause_start = pygame.time.get_ticks()
         result = pause_menu()
         if result != "resume":
+            pygame.mixer.music.stop()
             return result
+        pygame.mixer.music.unpause()
         dur = pygame.time.get_ticks() - pause_start
         start_time += dur
         last_spawn += dur
@@ -1057,23 +1066,20 @@ def game_loop(mode_key, time_limit=None, hardcore=False):
                 if event.key == pygame.K_ESCAPE and not game_over:
                     # Capture current frame so pause menu can freeze it
                     frozen = screen.copy()
+                    pygame.mixer.music.pause()
                     result = pause_menu(frozen)
+                    pygame.mixer.music.unpause()
                     if result == "resume":
                         pass                           # just continue
                     elif result == "restart":
+                        pygame.mixer.music.stop()
                         return finish("restart")
                     elif result == "menu":
+                        pygame.mixer.music.stop()
                         return finish("menu")
                     elif result == "quit":
+                        pygame.mixer.music.stop()
                         return finish("quit")
-                    if (game_over or game_won) and event.key == pygame.K_RETURN:
-                        return finish("restart")
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                mouse_clicked = True
-                if event.key == pygame.K_ESCAPE:
-                    if game_over or game_won:
-                        return finish("menu")
-                    wants_pause = True
                 if (game_over or game_won) and event.key == pygame.K_RETURN:
                     return finish("restart")
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -1317,6 +1323,10 @@ def game_loop(mode_key, time_limit=None, hardcore=False):
                 msg = font26.render(
                     f"! BOSS INCOMING  {int(countdown) + 1} !", True, RED)
                 screen.blit(msg, (WIDTH // 2 - msg.get_width() // 2, 70))
+
+        if (game_over or game_won) and music_playing:
+            pygame.mixer.music.stop()
+            music_playing = False
 
         # Game over / Win overlay
         if game_over:
